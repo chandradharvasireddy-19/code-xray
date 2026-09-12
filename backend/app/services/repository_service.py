@@ -3,6 +3,7 @@ from app.models.repository import RepositoryModel
 from app.storage.memory_store import db
 from app.ingestion.local_repo import LocalRepoLoader
 from app.ingestion import RepositoryWorkspace
+from app.analyzer.repository import RepositoryLoader
 
 
 class RepositoryService:
@@ -21,7 +22,17 @@ class RepositoryService:
             name=name,
             repository_id=repository_id,
         )
-        return loader.load()
+        workspace = loader.load()
+
+        repo_loader = RepositoryLoader(
+            repo_id=workspace.repository_id,
+            repo_path=workspace.path,
+            repo_name=workspace.name,
+        )
+        repo = repo_loader.load()
+        db.save_repository(repo)
+
+        return workspace
 
     @staticmethod
     def get_repository(repository_id: str) -> Optional[RepositoryModel]:
