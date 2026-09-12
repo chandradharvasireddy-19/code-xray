@@ -2,6 +2,8 @@ from typing import Any, Dict, Optional
 from app.ingestion.public_repo import PublicRepoLoader
 from app.ingestion.private_repo import PrivateRepoLoader
 from app.ingestion import RepositoryWorkspace
+from app.analyzer.repository import RepositoryLoader
+from app.storage.memory_store import db
 
 
 class GitHubService:
@@ -22,7 +24,18 @@ class GitHubService:
             name=name,
             repository_id=repository_id,
         )
-        return loader.load()
+        workspace = loader.load()
+        try:
+            repo_loader = RepositoryLoader(
+                repo_id=workspace.repository_id,
+                repo_path=workspace.path,
+                repo_name=workspace.name,
+            )
+            repo = repo_loader.load()
+            db.save_repository(repo)
+        except Exception:
+            pass
+        return workspace
 
     @staticmethod
     def ingest_private_repository(
@@ -39,4 +52,15 @@ class GitHubService:
             name=name,
             repository_id=repository_id,
         )
-        return loader.load()
+        workspace = loader.load()
+        try:
+            repo_loader = RepositoryLoader(
+                repo_id=workspace.repository_id,
+                repo_path=workspace.path,
+                repo_name=workspace.name,
+            )
+            repo = repo_loader.load()
+            db.save_repository(repo)
+        except Exception:
+            pass
+        return workspace

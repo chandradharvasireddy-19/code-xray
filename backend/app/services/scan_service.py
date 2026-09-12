@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.models.repository import RepositoryModel, Relationship, CodeEntity
 from app.models.finding import ForensicFinding
 from app.storage.memory_store import db
+from app.config import REPOS_DIR
 from app.ingestion import RepositoryWorkspace, RepositorySourceType
 from app.ingestion.local_repo import LocalRepoLoader
 from app.ingestion.public_repo import PublicRepoLoader
@@ -216,6 +217,42 @@ class ScanService:
         name: Optional[str],
         repository_id: str,
     ) -> RepositoryWorkspace:
+        # -------------------------------------------------------------------
+        # Fast-path: if this repository_id already has a workspace directory
+        # on disk (created by a prior /github/public or /github/private call),
+        # wrap it in a RepositoryWorkspace and return immediately without
+        # attempting a second clone. This resolves the "directory already
+        # exists and is not empty" error when scanning a previously-ingested
+        # GitHub repository.
+        # -------------------------------------------------------------------
+        existing_workspace_path = REPOS_DIR / repository_id
+        if existing_workspace_path.is_dir() and any(existing_workspace_path.iterdir()):
+            # Determine a sensible name: prefer the caller-supplied name, then
+            # fall back to what the db already knows, then use the directory name.
+            existing_repo = db.get_repository(repository_id)
+            resolved_name = (
+                name
+                or (existing_repo.name if existing_repo else None)
+                or existing_workspace_path.name
+            )
+            source = (
+                RepositorySourceType.GITHUB_PUBLIC.value
+                if not token
+                else RepositorySourceType.GITHUB_PRIVATE.value
+            )
+            return RepositoryWorkspace(
+                repository_id=repository_id,
+                name=resolved_name,
+                source=source,
+                path=str(existing_workspace_path.resolve()),
+                status="ready",
+                metadata={
+                    "repo_url": repo_url or "",
+                    "reused_existing_workspace": True,
+                    "is_git_repo": (existing_workspace_path / ".git").exists(),
+                },
+            )
+
         if path:
             loader = LocalRepoLoader(
                 local_path=path,
